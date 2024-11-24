@@ -134,4 +134,22 @@ scaled_df %>%
 # Big Five (na ose Y) v závislosti na ročníku/grade/ (na ose X) a pohlaví/sex/ 
 # (odlišené barevně) v grafu rozděleném do fazet podle faktorů Big Five
 
-#nestíhám :/
+#potřeba převést na long-format --> fce pivot_longer
+df <- read_csv2("https://is.muni.cz/go/g26j7j")
+
+df_long <- df %>% 
+  pivot_longer(bfi_ext:bfi_int,
+               names_to = "variable")
+
+df_long %>% 
+  ggplot(aes(x = factor(grade),  #aes = mapování
+             y = value,
+             color = gender)) +
+  stat_summary(fun = mean,  #chci průměry - nejsou v datech --> stat_summary()
+                geom = "line",    #fun = co_chci_spočítat
+                mapping = aes(group = gender,
+                              y = value)) + #tohle zobrazí čáry mezi průměry
+  stat_summary(fun.data = mean_cl_normal,
+               position = position_dodge(width = 0.2)) +
+  facet_wrap(~variable)
+#pak dávat další geomy pomocí stat_summary
