@@ -6,13 +6,29 @@ library(tidyverse)
 # specifikovat jakékoli nové rozpětí, např. 1–10.
 
 
-rescale_01 <- function(x) {
+rescale_01 <- function(x, min = 0, max = 1) {
+  #lze tady ještě dopsat stopifnot ... a podmínky pro max > min, x v rozmezí apod.
   rng <- range(x, finite = TRUE) # Ignorovat nekonečné hodnoty 
-  (x - rng[1]) / (rng[2] - rng[1])
+  output <- (x - rng[1]) / (rng[2] - rng[1])
+  new_range <- max - min
+  output <- output*new_range + min
+  return(output)
 }
 
 # Ukažte pak cvičné použití nové funkce např. na vektoru
 1:100
+rescale_01(1:100, min = 5, max = 15)
+
+#z cvičení z hodiny:
+#když převracím proměnné, tak odečítám hodnotu od x, které je vlastně
+#součet nejvyšší a nejnižší hodnoty
+reverse <- function(x) {
+  y <- sum(range(x))
+  y - x
+  #POZOR, předpokládá přítomnost krajních hodnot v datech
+}
+
+reverse(2:6)
 
 # 2) ---------------------------------------------------
 # Dokončete tělo funkce summary_mdn, tak aby funkce umožňovala vložený dataset
@@ -21,7 +37,7 @@ rescale_01 <- function(x) {
 
 summary_mdn <- function(data, group_vars, x_var) {
   data %>%  
-    group_by() %>%
+    group_by(pick(c({{ group_vars }}))) %>%
     summarise()
 
 }
