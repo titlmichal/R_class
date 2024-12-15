@@ -37,17 +37,20 @@ reverse(2:6)
 
 summary_mdn <- function(data, group_vars, x_var) {
   data %>%  
-    group_by(pick(c({{ group_vars }}))) %>%
-    summarise()
-
+    group_by(across(all_of(group_vars))) %>%
+    summarise(
+      median = median({{x_var}}, na.rm = TRUE),
+      mad = mad({{x_var}}, na.rm = TRUE)
+    )
 }
 
 # Ukažte cvičně použití této funkce např. na datasetu diamonds
 diamonds
 ?diamonds
+summary_mdn(diamonds, c("cut", "color"), carat)
+
 
 # 3) ---------------------------------------------------
-# Takto bychom 
 diamonds %>% 
   count(pick(cut, color)) %>% 
   mutate(p = n / sum(n),
@@ -66,11 +69,18 @@ count_prop <- function(data, var1, var2) {
 
 count_prop(diamonds, cut, color)
 
+plot_bar <- function(data, var1, var2) {
+  data %>% 
+    count(pick(c({{ var1 }}, {{ var2 }}))) %>% 
+    mutate(p = n/sum(n),
+           .by = {{ var1}}) %>% 
+    ggplot(aes(x = {{ var1 }}, y = n, fill = {{ var2 }})) +
+    geom_bar(stat = "identity", position = "stack")
+}
+
+plot_bar(diamonds, cut, color)
+
 # Rozšířením tohoto kódu vytvořte funkci plot_bar, která bude mít stejné 
 # argumenty, ale navíc nám vytvoří sloupcový graf s proměnnou var1 na 
 # ose X, četnostmi p na ose Y; a sloupce budou barevně odlišeny 
 # podle úrovní proměnné var2
-
-
-
-
