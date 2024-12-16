@@ -1,0 +1,231 @@
+library(tidyverse)
+
+# Načteme si tato data
+df <- read_csv2("https://is.muni.cz/el/fss/podzim2024/PSYb2320/um/datasets/personality_all.csv",
+                na = c("", "-99", "0"))
+
+df
+
+df %>% 
+  distinct(gender, class)
+
+# Jak bychom proměnnou gender převedli na faktor?
+# Převod gender na factor
+df <- df %>% 
+  mutate(
+    gender = factor(gender,
+                    levels = c("M", "F"),
+                    labels = c("Boys", "Girls"))
+  )
+
+# Jak bychom převrátili reverzní položky bez / s přepsáním původních sloupců?
+# Máme k dispozici vektor s názvy reverzních položek
+reversed_items <- c(
+  str_c("nfc_", 10:16),
+  str_c("ipip_", 
+        str_pad(2:28, width = 2, pad = 0))
+)
+
+# A práci nám usnadňuje to, že všechny položky měly pětibodovou odpovědní škálu
+df_rev <- df %>% 
+  mutate(
+    across(all_of(reversed_items),
+           ~ 6 - .x)
+  )
+?across
+
+names(df_rev)
+
+df_rev <- df %>% 
+  mutate(
+    across(all_of(reversed_items),
+           ~ 6 - .x,
+           .names = "{.col}")
+  )
+
+names(df_rev)
+
+# Jak bychom mohli vytvořit funkci, která bude vytvářet názvy položek?
+item_range <- function(prefix, num_range, width = 2) {
+  str_c(prefix,
+        str_pad(num_range, pad = 0, width = width))
+                            #leading 0   #délka stringu
+}
+
+item_range("nfc_", 1:15, width = 3)
+
+# NFC: 1 až 16
+# Extraversion: 1  6 11 16 21 26 31 36 41 46 
+# Agreeableness: 2  7 12 17 22 27 32 37 42 47
+# Conscientiousness: 3  8 13 18 23 28 33 38 43 48
+# Emotional stability: 4  9 14 19 24 29 34 39 44 49
+# Intellect: 5 10 15 20 25 30 35 40 45 50
+
+# Když máme list z položkami
+items <- list(
+  nfc = item_range("nfc_", 1:16),
+  bfi_ext = item_range("ipip_", seq(1, 50, by = 5)),
+  bfi_agr = item_range("ipip_", seq(2, 50, by = 5)),
+  bfi_con = item_range("ipip_", seq(3, 50, by = 5)),
+  bfi_est = item_range("ipip_", seq(4, 50, by = 5)),
+  bfi_int = item_range("ipip_", seq(5, 50, by = 5))
+)
+      #u B5 jsou reverzní položky ty páte
+
+seq(1, 50, by = 5)
+#generuje čísla od do s nějakým definovaným krokem
+
+items
+# Jak bychom mohli vytvořit funkci, která bude počítat průměry položek
+# vstupní argumenty: data, položky
+
+item_mean <- function(data, items) {
+  data %>% 
+    select(all_of(items)) %>%  #all_of protože vybíráme z text vektoru
+    rowMeans()
+  }
+
+item_mean(df,
+          items = items$nfc)
+
+# Jak bychom mohli vytvořit funkci, která bude počítat průměry položek
+# vstupní argumenty: data, položky, maximální počet missing values
+
+item_mean <- function(data, items, max.na = 0) {
+  data <- data %>% 
+    select(all_of(items))
+  
+  n_miss <- data %>% 
+    is.na() %>%   #is.na() převede dataset na True/False hodnoty 
+    rowSums()     #rowSums() pak sečte Trues
+                  #n_miss je pak numerický vektor
+  
+  out <- data %>% 
+    rowMeans(na.rm = TRUE)
+  
+  out[n_miss > max.na] <- NA
+      #n_miss a data (ty jsou v out) srovnává dle pořadí v obou vektorech
+  
+  out
+  }
+
+# Jak bychom tuto funkci mohli nyní použít k výpočtu celkových skórů každé škály
+
+item_mean(df_rev,
+          items = items$nfc,
+          max.na = 5)
+
+totals <- items %>% 
+  map(~item_mean(data = df_rev,      #map iterativně vkládá do fce iteam_mean
+                  items = .x)) %>%   #vkládá tam items a pozná, kde iterable začíná a končí
+  bind_cols()    #stač zadat objekt přes který iterovat, co na to uplatnit a co tam poslat
+
+totals
+
+# Co kdybychom ještě chtěli měnit i hodnoty argumentu max.na
+max.na <- c(2, rep(1, 5))
+max.na
+
+map2(
+  items, #rvní objekt
+  max.na, #druhý objekt
+  ~item_mean(data = df_rev,
+             items = ..1,  #tímhle označujeme, které objekt tam dát
+             max.na = ..2) #takže buď pomocí x a y nebo ..1 a ..2
+)
+
+# Jak bychom sloupce totals připojili k df a přemístili někde na začátek
+totals
+
+df <- bind_cols(df, totals) %>%    #musí mít stejný počet řádků
+  relocate(
+    all_of(names(totals)),   #names() vrací názvy, s all_of použijeme jako txt vektor
+    .after = class          #defaultně je to na začátek
+  )
+
+df
+
+# Jak bychom převedli data do longer formátu, aby hodnoty proměnných nfc až 
+# bfi_int byly v jednom sloupci?
+long <- df %>% 
+  pivot_longer(nfc:bfi_int,
+               names_to = "variable") %>% #name - název sloupce 1 se zdrojem, #value s hodnotou
+  relocate(id, variable, value)  #hodíme na začátek
+
+?pivot_longer
+
+long
+
+#  Jak bychom mohli vytvořit funkci, která bude počítat průměr s intervalem
+# spolehlivosti 
+
+mean_ci <- function(x, level = .95) {
+  
+  # Vyřaďte z x chybějící hodnoty
+  x <- x[!is.na(x)]
+  
+  # Spočítejte průměr m
+  m = mean(x, na.rm = TRUE)
+  
+  # Spočítejte směrodatnou odchylku s
+  s = sd(x)
+  
+  # Spočítejte počet pozorování
+  n <- length(x)
+  
+  # Vypočtěte stupně volnost df jako n - 1
+  df <- n - 1
+
+  # Vypočtěte standardní chybu se jako s / odmocnina z velikosti vzorku
+  se <- s / sqrt(n)
+  
+  # Vypočtěte hladinu alpha jako 1 - úroveň spolehlivosti
+  a <- 1 - level
+  
+  # vypočtěte 1 - alpha/2 kvantil t-rozdělení se stupni volnosti df
+  q <- qt(1 - level/2, df = df)
+    #default fce qt
+  
+  # Vypočtěte mezní chybu jako se*q
+  me <- se * q
+  
+  # Uložte do tibblu průměr (m) a meze intervalu spolehlivosti
+  # čili m - me a m + me
+  tibble(
+    m = m,
+    ci_lower = m - me,
+    ci_upper = m + me
+  )
+
+}
+df
+
+mean_ci(df$nfc)
+
+# Jak bychom tuto funkci mohli použít pro výpočet souhrnných statistik 
+# podle ročníku a pohlaví?
+group_means <- long %>% 
+  group_by(grade, gender, variable) %>%  #je to v long formátu, proto group i skrze variable
+  summarise(
+    mean_ci(value, level = .95)
+  )
+
+group_means
+
+# Jak bychom výsledky znázornili graficky?
+p <- position_dodge(width = .2)
+
+group_means %>% 
+  ggplot(aes(x = grade,
+             color = gender,
+             y = m,
+             ymin = ci_lower,
+             ymax = ci_upper)) +
+  geom_pointrange(position = p) +
+  geom_line(position = p) +
+  facet_wrap(~variable) +
+  scale_color_manual(values = c("blue", "red")) +
+  labs(x = "Ročník",
+       y = "Průměry s 99% CIs",
+       color = "Pohlaví")
+
